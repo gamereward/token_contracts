@@ -251,6 +251,14 @@ contract GameRewardToken is owned, TokenERC20 {
     uint256 public constant tokenCreationMax = 600000000000000000000000000; //ICO hard target - 600 millions
     uint256 public constant tokenCreationMin =  60000000000000000000000000; //ICO soft target - 60 millions
 
+    uint256 public constant tokenPrivateMax =  200000000000000000000000000; //Private-sale must stop when 100 millions tokens sold
+
+    uint256 public constant minContributionAmount =     250000000000000000; //Backer must buy atleast 0.25ETH in open-sale
+    uint256 public constant maxContributionAmount =  100000000000000000000; //Max 100 ETH in open-sale and pre-sale
+
+    uint256 public constant minPrivateContribution =  50000000000000000000; //Backer must buy atleast 50ETH in private-sale
+    uint256 public constant minPreContribution =       1000000000000000000; //Backer must buy atleast 1ETH in pre-sale
+
     uint256 public constant minAmountToGetBonus =      5000000000000000000; //Backer must buy atleast 5ETH to receive referral bonus
     uint256 public constant referralBonus =                              5; //5% for referral bonus
     uint256 public constant privateBonus =                              40; //40% bonus in private-sale
@@ -416,6 +424,14 @@ contract GameRewardToken is owned, TokenERC20 {
         require (getState() != State.Failure);
         require (msg.value != 0);
 
+        if(getState()==State.PrivateFunding){
+            require(msg.value>=minPrivateContribution);
+        }else if(getState()==State.PreFunding){
+            require(msg.value>=minPreContribution && msg.value < maxContributionAmount);
+        }else if(getState()==State.Funding){
+            require(msg.value==minContributionAmount && msg.value < maxContributionAmount);
+        }
+
         // multiply by exchange rate to get newly created token amount
         uint256 createdTokens = safeMul(msg.value, tokensPerEther);
         uint256 brokerBonus = 0;
@@ -423,16 +439,21 @@ contract GameRewardToken is owned, TokenERC20 {
 
         createdTokens = safeAdd(createdTokens,earlyBonus);
 
-        if(referrals[msg.sender]!= 0x0){
-            brokerBonus = safeDiv(safeMul(createdTokens,referralBonus),hundredPercent);
-            bonus[referrals[msg.sender]] = safeAdd(bonus[referrals[msg.sender]],brokerBonus);
+        // don't go over the limit!
+        if(getState()==State.PrivateFunding){
+            require(safeAdd(tokensSold,createdTokens) <= tokenPrivateMax);
+        }else{
+            require (safeAdd(tokensSold,createdTokens) <= tokenCreationMax);
         }
 
         // we are creating tokens, so increase the totalSupply
         tokensSold = safeAdd(tokensSold, createdTokens);
 
-        // don't go over the limit!
-        require (tokensSold <= tokenCreationMax);
+        if(referrals[msg.sender]!= 0x0){
+            brokerBonus = safeDiv(safeMul(createdTokens,referralBonus),hundredPercent);
+            bonus[referrals[msg.sender]] = safeAdd(bonus[referrals[msg.sender]],brokerBonus);
+        }
+
 
         funders[funders.length++] = Funder({addr: msg.sender, amount: msg.value});
         // Assign new tokens to the sender
