@@ -220,6 +220,12 @@ contract GameRewardToken is owned, TokenERC20 {
     // State machine
     enum State{PrivateFunding, PreFunding, Funding, Success, Failure}
 
+    /* data structure to hold information about campaign contributors */
+    struct Funder {
+        address addr;
+        uint amount;
+    }
+
     Funder[] public funders;
 
     mapping (address => bool) public frozenAccount;
@@ -238,6 +244,7 @@ contract GameRewardToken is owned, TokenERC20 {
     event ChangeCampaign(uint256 fundingStartBlock, uint256 fundingEndBlock);
     event FundTransfer(address backer, uint amount, bool isContribution);
     event AddBounty(address bountyHunter, uint amount);
+
      // Crowdsale information
     bool public finalizedCrowdfunding = false;
 
@@ -273,14 +280,6 @@ contract GameRewardToken is owned, TokenERC20 {
     address public lockedTokenHolder;
     address public releaseTokenHolder;
     address public devsHolder;
-
-
-    /* data structure to hold information about campaign contributors */
-    struct Funder {
-        address addr;
-        uint amount;
-    }
-
 
     function GameRewardToken(
                         address _lockedTokenHolder,
@@ -417,8 +416,6 @@ contract GameRewardToken is owned, TokenERC20 {
     /// @dev State transition: -> Funding Success (only if cap reached)
     function() payable public{
         // Abort if not in Funding Active state.
-        // The checks are split (instead of using or operator) because it is
-        // cheaper this way.
         // Do not allow creating 0 or more than the cap tokens.
         require (getState() != State.Success);
         require (getState() != State.Failure);
@@ -511,13 +508,13 @@ contract GameRewardToken is owned, TokenERC20 {
         // prevent more creation of tokens
         finalizedCrowdfunding = true;
         _releaseBonus();
-        // Endowment: 30% of total goes to vault, timelocked for 6 months
+        // Endowment: 25% of total goes to vault, timelocked for 6 months
         balanceOf[lockedTokenHolder] = safeAdd(balanceOf[lockedTokenHolder], lockedTokens);
 
         unlockedAtBlockNumber = block.number + numBlocksLocked;
         emit Transfer(0, lockedTokenHolder, lockedTokens);
 
-        // Endowment: 10% of total goes to devs for marketing and bug bounty
+        // Endowment: 10% of total goes to devs for marketing
         balanceOf[devsHolder] = safeAdd(balanceOf[devsHolder], devsTokens);
         emit Transfer(0, devsHolder, devsTokens);
 
