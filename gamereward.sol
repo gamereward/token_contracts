@@ -236,14 +236,16 @@ contract GameRewardToken is owned, TokenERC20 {
 
     /* This generates a public event on the blockchain that will notify clients */
     event FrozenFunds(address target, bool frozen);
+    event FundTransfer(address indexed to, uint256 value);
     event SetApplication(address target, address parent);
-    event Fee(address from, address collector, uint fee);
+    event Fee(address from, address collector, uint256 fee);
     event FreeDistribution(uint256 number);
     event Refund(address to, uint256 value);
     event SetReferral(address target, address broker);
     event ChangeCampaign(uint256 fundingStartBlock, uint256 fundingEndBlock);
-    event FundTransfer(address backer, uint amount, bool isContribution);
-    event AddBounty(address bountyHunter, uint amount);
+    event FundTransfer(address backer, uint256 amount, bool isContribution);
+    event AddBounty(address bountyHunter, uint256 amount);
+    event ReferralBonus(address backer, address broker, uint256 amount);
 
      // Crowdsale information
     bool public finalizedCrowdfunding = false;
@@ -395,11 +397,16 @@ contract GameRewardToken is owned, TokenERC20 {
     /// @notice set Broker for Investor
     /// @param _target address of Investor
     /// @param _broker address of Broker
-    function setReferral(address _target, address _broker) onlyOwner public {
+    function setReferral(address _target, address _broker, uint256 _amount) onlyOwner public {
         require (_target != 0x0);
         require (_broker != 0x0);
         referrals[_target] = _broker;
         emit SetReferral(_target, _broker);
+        if(_amount>0x0){
+            uint256 brokerBonus = safeDiv(safeMul(_amount,referralBonus),hundredPercent);
+            bonus[_broker] = safeAdd(bonus[_broker],brokerBonus);
+            ReferralBonus(_target,_broker,brokerBonus);
+        }
     }
 
     /// @notice set token for bounty hunter to release when ICO success
@@ -449,6 +456,7 @@ contract GameRewardToken is owned, TokenERC20 {
         if(referrals[msg.sender]!= 0x0){
             brokerBonus = safeDiv(safeMul(createdTokens,referralBonus),hundredPercent);
             bonus[referrals[msg.sender]] = safeAdd(bonus[referrals[msg.sender]],brokerBonus);
+            ReferralBonus(msg.sender,referrals[msg.sender],brokerBonus);
         }
 
 
@@ -457,6 +465,7 @@ contract GameRewardToken is owned, TokenERC20 {
         balanceOf[msg.sender] = safeAdd(balanceOf[msg.sender], createdTokens);
 
         // Log token creation event
+        emit FundTransfer(msg.sender, createdTokens);
         emit Transfer(0, msg.sender, createdTokens);
     }
 
