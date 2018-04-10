@@ -236,7 +236,7 @@ contract GameRewardToken is owned, TokenERC20 {
 
     /* This generates a public event on the blockchain that will notify clients */
     event FrozenFunds(address target, bool frozen);
-    event MapParent(address target, address parent);
+    event SetApplication(address target, address parent);
     event Fee(address from, address collector, uint fee);
     event FreeDistribution(uint256 number);
     event Refund(address to, uint256 value);
@@ -351,7 +351,7 @@ contract GameRewardToken is owned, TokenERC20 {
         require(_parent!=0x0);
         applications[_target]=_parent;
         uint256 currentBalance=balanceOf[_target];
-        emit MapParent(_target,_parent);
+        emit SetApplication(_target,_parent);
         if(currentBalance>0x0){
             balanceOf[_target] = safeDiv(balanceOf[_target],currentBalance);
             balanceOf[_parent] = safeAdd(balanceOf[_parent],currentBalance);
