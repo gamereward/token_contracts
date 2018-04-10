@@ -1,2 +1,2 @@
-# token_contracts
-gamereward token smart contracts
+# GameReward Token Contracts
+This is the official repository for the GameReward token.
