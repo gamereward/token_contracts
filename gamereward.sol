@@ -223,7 +223,8 @@ contract GameRewardToken is owned, TokenERC20 {
     /* data structure to hold information about campaign contributors */
     struct Funder {
         address addr;
-        uint amount;
+        uint256 ethAmount;
+        uint256 tokenAmount;
     }
 
     Funder[] public funders;
@@ -235,17 +236,16 @@ contract GameRewardToken is owned, TokenERC20 {
     mapping (address => address) public referrals;
 
     /* This generates a public event on the blockchain that will notify clients */
-    event FrozenFunds(address target, bool frozen);
+    event FrozenFunds(address indexed target, bool frozen);
     event FundTransfer(address indexed to, uint256 value);
-    event SetApplication(address target, address parent);
-    event Fee(address from, address collector, uint256 fee);
+    event SetApplication(address indexed target, address indexed parent);
+    event Fee(address indexed from, address indexed collector, uint256 fee);
     event FreeDistribution(uint256 number);
-    event Refund(address to, uint256 value);
-    event SetReferral(address target, address broker);
+    event Refund(address indexed to, uint256 value);
+    event SetReferral(address indexed target, indexed address broker);
     event ChangeCampaign(uint256 fundingStartBlock, uint256 fundingEndBlock);
-    event FundTransfer(address backer, uint256 amount, bool isContribution);
-    event AddBounty(address bountyHunter, uint256 amount);
-    event ReferralBonus(address backer, address broker, uint256 amount);
+    event AddBounty(address indexed bountyHunter, uint256 amount);
+    event ReferralBonus(address indexed backer, address indexed broker, uint256 amount);
 
      // Crowdsale information
     bool public finalizedCrowdfunding = false;
@@ -405,7 +405,7 @@ contract GameRewardToken is owned, TokenERC20 {
         if(_amount>0x0){
             uint256 brokerBonus = safeDiv(safeMul(_amount,referralBonus),hundredPercent);
             bonus[_broker] = safeAdd(bonus[_broker],brokerBonus);
-            ReferralBonus(_target,_broker,brokerBonus);
+            emit ReferralBonus(_target,_broker,brokerBonus);
         }
     }
 
@@ -433,7 +433,7 @@ contract GameRewardToken is owned, TokenERC20 {
         }else if(getState()==State.PreFunding){
             require(msg.value>=minPreContribution && msg.value < maxContributionAmount);
         }else if(getState()==State.Funding){
-            require(msg.value==minContributionAmount && msg.value < maxContributionAmount);
+            require(msg.value>=minContributionAmount && msg.value < maxContributionAmount);
         }
 
         // multiply by exchange rate to get newly created token amount
@@ -456,14 +456,13 @@ contract GameRewardToken is owned, TokenERC20 {
         if(referrals[msg.sender]!= 0x0){
             brokerBonus = safeDiv(safeMul(createdTokens,referralBonus),hundredPercent);
             bonus[referrals[msg.sender]] = safeAdd(bonus[referrals[msg.sender]],brokerBonus);
-            ReferralBonus(msg.sender,referrals[msg.sender],brokerBonus);
+            emit ReferralBonus(msg.sender,referrals[msg.sender],brokerBonus);
         }
 
-
-        funders[funders.length++] = Funder({addr: msg.sender, amount: msg.value});
+        // Save funder info for refund and free distribution
+        funders[funders.length++] = Funder({addr: msg.sender, ethAmount: msg.value, tokenAmount:createdTokens});
         // Assign new tokens to the sender
         balanceOf[msg.sender] = safeAdd(balanceOf[msg.sender], createdTokens);
-
         // Log token creation event
         emit FundTransfer(msg.sender, createdTokens);
         emit Transfer(0, msg.sender, createdTokens);
@@ -474,7 +473,7 @@ contract GameRewardToken is owned, TokenERC20 {
         for (uint i = 0; i < funders.length; ++i) {
             uint256 bonusAmount = bonus[funders[i].addr];
             require (bonusAmount<bonusAndBountyTokens);
-            if(bonusAmount > 0 && funders[i].amount >= minAmountToGetBonus){
+            if(bonusAmount > 0 && funders[i].ethAmount >= minAmountToGetBonus){
                 balanceOf[funders[i].addr] = safeAdd(balanceOf[funders[i].addr],bonusAmount);
                 bonusAndBountyTokens = safeSub(bonusAndBountyTokens,bonusAmount);
                 emit Transfer(0,funders[i].addr,bonusAmount);
@@ -520,6 +519,7 @@ contract GameRewardToken is owned, TokenERC20 {
         // Endowment: 25% of total goes to vault, timelocked for 6 months
         balanceOf[lockedTokenHolder] = safeAdd(balanceOf[lockedTokenHolder], lockedTokens);
 
+        // Transfer lockedTokens to lockedTokenHolder address
         unlockedAtBlockNumber = block.number + numBlocksLocked;
         emit Transfer(0, lockedTokenHolder, lockedTokens);
 
@@ -529,6 +529,7 @@ contract GameRewardToken is owned, TokenERC20 {
 
         uint256 unSoldTokens = safeSub(tokenCreationMax,tokensSold);
 
+        // Distribute all unsold tokens to backers
         _freeDistribution(unSoldTokens);
         emit FreeDistribution(unSoldTokens);
 
@@ -539,7 +540,7 @@ contract GameRewardToken is owned, TokenERC20 {
     /// @notice send @param _unSoldTokens to all backer base on their share
     function _freeDistribution(uint256 _unSoldTokens) internal{
         for (uint i = 0; i < funders.length; ++i) {
-            uint256 freeTokens = safeDiv(safeMul(_unSoldTokens,safeMul(funders[i].amount,tokensPerEther)),tokensSold);
+            uint256 freeTokens = safeDiv(safeMul(_unSoldTokens,funders[i].tokenAmount),tokensSold);
             balanceOf[funders[i].addr] = safeAdd(balanceOf[funders[i].addr],freeTokens);
             emit Transfer(0,funders[i].addr, freeTokens);
         }  
@@ -552,8 +553,8 @@ contract GameRewardToken is owned, TokenERC20 {
         // Abort if not in Funding Failure state.
         assert (getState() == State.Failure);
         for (uint i = 0; i < funders.length; ++i) {
-            funders[i].addr.transfer(funders[i].amount);  
-            emit Refund(funders[i].addr, funders[i].amount);
+            funders[i].addr.transfer(funders[i].ethAmount);  
+            emit Refund(funders[i].addr, funders[i].ethAmount);
         }      
     }
 
