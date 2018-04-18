@@ -104,16 +104,16 @@ contract TokenERC20 is SafeMath{
         // Check if the sender has enough
         require(balanceOf[_from] >= _value);
         // Check for overflows
-        require(balanceOf[_to] + _value > balanceOf[_to]);
+        require(SafeAdd(balanceOf[_to], _value)) > balanceOf[_to]);
         // Save this for an assertion in the future
-        uint previousBalances = balanceOf[_from] + balanceOf[_to];
+        uint previousBalances = SafeAdd(balanceOf[_from],balanceOf[_to]);
         // Subtract from the sender
-        balanceOf[_from] -= _value;
+        balanceOf[_from] = SafeSub(balanceOf[_from], _value);
         // Add the same to the recipient
-        balanceOf[_to] += _value;
+        balanceOf[_to] = SafeAdd(balanceOf[_to], _value);
         emit Transfer(_from, _to, _value);
         // Asserts are used to use static analysis to find bugs in your code. They should never fail
-        assert(balanceOf[_from] + balanceOf[_to] == previousBalances);
+        assert(SafeAdd(balanceOf[_from],balanceOf[_to]) == previousBalances);
     }
 
     /**
@@ -139,7 +139,7 @@ contract TokenERC20 is SafeMath{
      */
     function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {
         require(_value <= allowance[_from][msg.sender]);     // Check allowance
-        allowance[_from][msg.sender] -= _value;
+        allowance[_from][msg.sender] = SafeSub(allowance[_from][msg.sender],_value);
         _transfer(_from, _to, _value);
         return true;
     }
@@ -186,8 +186,8 @@ contract TokenERC20 is SafeMath{
      */
     function burn(uint256 _value) public returns (bool success) {
         require(balanceOf[msg.sender] >= _value);   // Check if the sender has enough
-        balanceOf[msg.sender] -= _value;            // Subtract from the sender
-        totalSupply -= _value;                      // Updates totalSupply
+        balanceOf[msg.sender] = SafeSub(balanceOf[msg.sender], _value);            // Subtract from the sender
+        totalSupply = SafeSub(totalSupply,_value);                      // Updates totalSupply
         emit Burn(msg.sender, _value);
         return true;
     }
@@ -203,9 +203,9 @@ contract TokenERC20 is SafeMath{
     function burnFrom(address _from, uint256 _value) public returns (bool success) {
         require(balanceOf[_from] >= _value);                // Check if the targeted balance is enough
         require(_value <= allowance[_from][msg.sender]);    // Check allowance
-        balanceOf[_from] -= _value;                         // Subtract from the targeted balance
-        allowance[_from][msg.sender] -= _value;             // Subtract from the sender's allowance
-        totalSupply -= _value;                              // Update totalSupply
+        balanceOf[_from] = SafeSub(balanceOf[_from], _value);                         // Subtract from the targeted balance
+        allowance[_from][msg.sender] = SafeSub(allowance[_from], _value);             // Subtract from the sender's allowance
+        totalSupply = SafeSub(totalSupply,_value);                              // Update totalSupply
         emit Burn(_from, _value);
         return true;
     }
@@ -220,20 +220,14 @@ contract GameRewardToken is owned, TokenERC20 {
     // State machine
     enum State{PrivateFunding, PreFunding, Funding, Success, Failure}
 
-    /* data structure to hold information about campaign contributors */
-    struct Funder {
-        address addr;
-        uint256 ethAmount;
-        uint256 tokenAmount;
-    }
-
-    Funder[] public funders;
 
     mapping (address => bool) public frozenAccount;
     mapping (address => address) public applications;
     mapping (address => uint256) public bounties;
     mapping (address => uint256) public bonus;
     mapping (address => address) public referrals;
+    mapping (address => uint256) public investors;
+    mapping (address => uint256) public funders;
 
     /* This generates a public event on the blockchain that will notify clients */
     event FrozenFunds(address indexed target, bool frozen);
@@ -304,17 +298,17 @@ contract GameRewardToken is owned, TokenERC20 {
     /* Internal transfer, only can be called by this contract */
     function _transfer(address _from, address _to, uint _value) internal {
         require (getState() == State.Success);
-        require (_to != 0x0);                               // Prevent transfer to 0x0 address. Use burn() instead
-        require (balanceOf[_from] >= _value);               // Prevent transfer to 0x0 address. Use burn() instead
+        require (_to != 0x0);                                      // Prevent transfer to 0x0 address. Use burn() instead
+        require (balanceOf[_from] >= _value);                      // Prevent transfer to 0x0 address. Use burn() instead
         require (safeAdd(balanceOf[_to],_value) > balanceOf[_to]); // Check for overflows
-        require (!frozenAccount[_from]);                     // Check if sender is frozen
-        require (!frozenAccount[_to]);                       // Check if recipient is frozen
+        require (!frozenAccount[_from]);                           // Check if sender is frozen
+        require (!frozenAccount[_to]);                             // Check if recipient is frozen
         require (_from != lockedTokenHolder);
-        balanceOf[_from] = safeSub(balanceOf[_from],_value);                        // Subtract from the sender
-        balanceOf[_to] = safeAdd(balanceOf[_to],_value);                           // Add the same to the recipient
+        balanceOf[_from] = safeSub(balanceOf[_from],_value);       // Subtract from the sender
+        balanceOf[_to] = safeAdd(balanceOf[_to],_value);           // Add the same to the recipient
         emit Transfer(_from, _to, _value);
-        if(applications[_to] != 0x0){
-            balanceOf[_to] = safeSub(balanceOf[_to],_value);    
+        if(applications[_to] != 0x0){                              // If this address from an application
+            balanceOf[_to] = safeSub(balanceOf[_to],_value);       // Forward tokens to application address 
             balanceOf[applications[_to]] =safeAdd(balanceOf[applications[_to]],_value);    
             emit Transfer(_to, applications[_to], _value);
         }
@@ -328,24 +322,24 @@ contract GameRewardToken is owned, TokenERC20 {
     ///@param _collector address of collector to receive fee
     function withdraw(address _from, address _to, uint _value, uint _fee, address _collector) onlyOwner public {
         require (getState() == State.Success);
-        require (applications[_from]!=0x0);                         // Check if sender have application
+        require (applications[_from]!=0x0);                             // Check if sender from an application
         address app = applications[_from];
         require (_collector != 0x0);
-        require (_to != 0x0);                                   // Prevent transfer to 0x0 address. Use burn() instead
+        require (_to != 0x0);                                           // Prevent transfer to 0x0 address. Use burn() instead
         require (balanceOf[app] >= safeAdd(_value, _fee));              // Prevent transfer to 0x0 address. Use burn() instead
-        require (safeAdd(balanceOf[_to], _value)> balanceOf[_to]);     // Check for overflows
-        require (!frozenAccount[app]);                          // Check if sender is frozen
-        require (!frozenAccount[_to]);                          // Check if recipient is frozen
+        require (safeAdd(balanceOf[_to], _value)> balanceOf[_to]);      // Check for overflows
+        require (!frozenAccount[app]);                                  // Check if sender is frozen
+        require (!frozenAccount[_to]);                                  // Check if recipient is frozen
         require (_from != lockedTokenHolder);
-        balanceOf[app] = safeSub(balanceOf[app],safeAdd(_value, _fee));                      // Subtract from the sender
-        balanceOf[_to] = safeAdd(balanceOf[_to],_value);  
-        balanceOf[_collector] = safeAdd(balanceOf[_collector], _fee); 
+        balanceOf[app] = safeSub(balanceOf[app],safeAdd(_value, _fee)); // Subtract from the Application
+        balanceOf[_to] = safeAdd(balanceOf[_to],_value);                // Add value to the target
+        balanceOf[_collector] = safeAdd(balanceOf[_collector], _fee);   // Add fee to fee collector
         emit Fee(app,_collector,_fee);
         emit Transfer(app, _collector, _fee);
         emit Transfer(app, _to, _value);
     }
     
-    ///@notice map an address to its parent
+    ///@notice map an address to its application address
     ///@param _target Address to set parent
     ///@param _parent Address of parent
     function setApplication(address _target, address _parent) onlyOwner public {
@@ -450,9 +444,11 @@ contract GameRewardToken is owned, TokenERC20 {
             require (safeAdd(tokensSold,createdTokens) <= tokenCreationMax);
         }
 
-        // we are creating tokens, so increase the totalSupply
+        // we are creating tokens, so increase the tokenSold
         tokensSold = safeAdd(tokensSold, createdTokens);
-
+        
+        
+        // add bonus if has referral
         if(referrals[msg.sender]!= 0x0){
             brokerBonus = safeDiv(safeMul(createdTokens,referralBonus),hundredPercent);
             bonus[referrals[msg.sender]] = safeAdd(bonus[referrals[msg.sender]],brokerBonus);
@@ -460,7 +456,9 @@ contract GameRewardToken is owned, TokenERC20 {
         }
 
         // Save funder info for refund and free distribution
-        funders[funders.length++] = Funder({addr: msg.sender, ethAmount: msg.value, tokenAmount:createdTokens});
+        funders[msg.sender] = safeAdd(funders[msg.sender],msg.value);
+        investors[msg.sender] = safeAdd(investors[msg.sender],createdTokens);
+
         // Assign new tokens to the sender
         balanceOf[msg.sender] = safeAdd(balanceOf[msg.sender], createdTokens);
         // Log token creation event
@@ -469,16 +467,15 @@ contract GameRewardToken is owned, TokenERC20 {
     }
 
     /// @notice send bonus token to broker
-    function _releaseBonus() internal{
-        for (uint i = 0; i < funders.length; ++i) {
-            uint256 bonusAmount = bonus[funders[i].addr];
-            require (bonusAmount<bonusAndBountyTokens);
-            if(bonusAmount > 0 && funders[i].ethAmount >= minAmountToGetBonus){
-                balanceOf[funders[i].addr] = safeAdd(balanceOf[funders[i].addr],bonusAmount);
-                bonusAndBountyTokens = safeSub(bonusAndBountyTokens,bonusAmount);
-                emit Transfer(0,funders[i].addr,bonusAmount);
-            }
-        }
+    function requestBonus() external{
+      require(getState()==State.Success);
+      uint256 bonusAmount = bonus[msg.sender];
+      assert(bonusAmount>0);
+      require(bonusAmount<bonusAndBountyTokens);
+      balanceOf[msg.sender] = safeAdd(balanceOf[msg.sender],bonusAmount);
+      bonus[msg.sender] = 0;
+      bonusAndBountyTokens = safeSub(bonusAndBountyTokens,bonusAmount);
+      emit Transfer(0,msg.sender,bonusAmount);
     }
 
     /// @notice send lockedTokens to devs address
@@ -505,8 +502,8 @@ contract GameRewardToken is owned, TokenERC20 {
 
     /// @notice Finalize crowdfunding
     /// @dev If cap was reached or crowdfunding has ended then:
-    /// create LUN for the Lunyr Multisig and developer,
-    /// transfer ETH to the Lunyr Multisig address.
+    /// create GRD for the Vault and developer,
+    /// transfer ETH to the devs address.
     /// @dev Required state: Success
     function finalizeCrowdfunding() external {
         // Abort if not in Funding Success state.
@@ -515,7 +512,6 @@ contract GameRewardToken is owned, TokenERC20 {
 
         // prevent more creation of tokens
         finalizedCrowdfunding = true;
-        _releaseBonus();
         // Endowment: 25% of total goes to vault, timelocked for 6 months
         balanceOf[lockedTokenHolder] = safeAdd(balanceOf[lockedTokenHolder], lockedTokens);
 
@@ -523,39 +519,38 @@ contract GameRewardToken is owned, TokenERC20 {
         unlockedAtBlockNumber = block.number + numBlocksLocked;
         emit Transfer(0, lockedTokenHolder, lockedTokens);
 
-        // Endowment: 10% of total goes to devs for marketing
+        // Endowment: 10% of total goes to devs
         balanceOf[devsHolder] = safeAdd(balanceOf[devsHolder], devsTokens);
         emit Transfer(0, devsHolder, devsTokens);
-
-        uint256 unSoldTokens = safeSub(tokenCreationMax,tokensSold);
-
-        // Distribute all unsold tokens to backers
-        _freeDistribution(unSoldTokens);
-        emit FreeDistribution(unSoldTokens);
 
         // Transfer ETH to the devs address.
         devsHolder.transfer(address(this).balance);
     }
 
     /// @notice send @param _unSoldTokens to all backer base on their share
-    function _freeDistribution(uint256 _unSoldTokens) internal{
-        for (uint i = 0; i < funders.length; ++i) {
-            uint256 freeTokens = safeDiv(safeMul(_unSoldTokens,funders[i].tokenAmount),tokensSold);
-            balanceOf[funders[i].addr] = safeAdd(balanceOf[funders[i].addr],freeTokens);
-            emit Transfer(0,funders[i].addr, freeTokens);
-        }  
+    function requestFreeDistribution() external{
+      require(getState()==State.Success);
+      assert(investors[msg.sender]>0);
+      uint256 unSoldTokens = safeSub(tokenCreationMax,tokensSold);
+      require(unSoldTokens>0);
+      uint256 freeTokens = safeDiv(safeMul(unSoldTokens,investors[msg.sender]),tokensSold);
+      balanceOf[msg.sender] = safeAdd(balanceOf[msg.sender],freeTokens);
+      investors[msg.sender] = 0;
+      emit FreeDistribution(freeTokens);
+      emit Transfer(0,msg.sender, freeTokens);
+
     }
 
     /// @notice Get back the ether sent during the funding in case the funding
-    /// has not reached the minimum level.
+    /// has not reached the soft cap.
     /// @dev Required state: Failure
-    function refund() external {
+    function requestRefund() external {
         // Abort if not in Funding Failure state.
         assert (getState() == State.Failure);
-        for (uint i = 0; i < funders.length; ++i) {
-            funders[i].addr.transfer(funders[i].ethAmount);  
-            emit Refund(funders[i].addr, funders[i].ethAmount);
-        }      
+        assert (funders[msg.sender]>0);
+        msg.sender.transfer(funders[msg.sender]);  
+        funders[msg.sender]=0;
+        emit Refund( msg.sender, funders[msg.sender]);
     }
 
     /// @notice This manages the crowdfunding state machine
