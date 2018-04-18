@@ -3,7 +3,7 @@ pragma solidity ^0.4.21;
 contract owned {
     address public owner;
 
-    function owned() public {
+    constructor() public {
         owner = msg.sender;
     }
 
@@ -88,7 +88,7 @@ contract TokenERC20 is SafeMath{
      *
      * Initializes contract with initial supply tokens to the creator of the contract
      */
-    function TokenERC20(string _name, string _symbol, uint8 _decimals, uint256 _totalSupply) public {
+    constructor(string _name, string _symbol, uint8 _decimals, uint256 _totalSupply) public {
         name = _name;
         symbol = _symbol;
         decimals = _decimals;
@@ -104,16 +104,16 @@ contract TokenERC20 is SafeMath{
         // Check if the sender has enough
         require(balanceOf[_from] >= _value);
         // Check for overflows
-        require(SafeAdd(balanceOf[_to], _value)) > balanceOf[_to]);
+        require(safeAdd(balanceOf[_to], _value) > balanceOf[_to]);
         // Save this for an assertion in the future
-        uint previousBalances = SafeAdd(balanceOf[_from],balanceOf[_to]);
+        uint previousBalances = safeAdd(balanceOf[_from],balanceOf[_to]);
         // Subtract from the sender
-        balanceOf[_from] = SafeSub(balanceOf[_from], _value);
+        balanceOf[_from] = safeSub(balanceOf[_from], _value);
         // Add the same to the recipient
-        balanceOf[_to] = SafeAdd(balanceOf[_to], _value);
+        balanceOf[_to] = safeAdd(balanceOf[_to], _value);
         emit Transfer(_from, _to, _value);
         // Asserts are used to use static analysis to find bugs in your code. They should never fail
-        assert(SafeAdd(balanceOf[_from],balanceOf[_to]) == previousBalances);
+        assert(safeAdd(balanceOf[_from],balanceOf[_to]) == previousBalances);
     }
 
     /**
@@ -139,7 +139,7 @@ contract TokenERC20 is SafeMath{
      */
     function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {
         require(_value <= allowance[_from][msg.sender]);     // Check allowance
-        allowance[_from][msg.sender] = SafeSub(allowance[_from][msg.sender],_value);
+        allowance[_from][msg.sender] = safeSub(allowance[_from][msg.sender],_value);
         _transfer(_from, _to, _value);
         return true;
     }
@@ -186,8 +186,8 @@ contract TokenERC20 is SafeMath{
      */
     function burn(uint256 _value) public returns (bool success) {
         require(balanceOf[msg.sender] >= _value);   // Check if the sender has enough
-        balanceOf[msg.sender] = SafeSub(balanceOf[msg.sender], _value);            // Subtract from the sender
-        totalSupply = SafeSub(totalSupply,_value);                      // Updates totalSupply
+        balanceOf[msg.sender] = safeSub(balanceOf[msg.sender], _value);            // Subtract from the sender
+        totalSupply = safeSub(totalSupply,_value);                      // Updates totalSupply
         emit Burn(msg.sender, _value);
         return true;
     }
@@ -203,9 +203,9 @@ contract TokenERC20 is SafeMath{
     function burnFrom(address _from, uint256 _value) public returns (bool success) {
         require(balanceOf[_from] >= _value);                // Check if the targeted balance is enough
         require(_value <= allowance[_from][msg.sender]);    // Check allowance
-        balanceOf[_from] = SafeSub(balanceOf[_from], _value);                         // Subtract from the targeted balance
-        allowance[_from][msg.sender] = SafeSub(allowance[_from], _value);             // Subtract from the sender's allowance
-        totalSupply = SafeSub(totalSupply,_value);                              // Update totalSupply
+        balanceOf[_from] = safeSub(balanceOf[_from], _value);                         // Subtract from the targeted balance
+        allowance[_from][msg.sender] = safeSub(allowance[_from][msg.sender], _value);             // Subtract from the sender's allowance
+        totalSupply = safeSub(totalSupply,_value);                              // Update totalSupply
         emit Burn(_from, _value);
         return true;
     }
@@ -236,16 +236,16 @@ contract GameRewardToken is owned, TokenERC20 {
     event Fee(address indexed from, address indexed collector, uint256 fee);
     event FreeDistribution(uint256 number);
     event Refund(address indexed to, uint256 value);
-    event SetReferral(address indexed target, indexed address broker);
+    event SetReferral(address indexed target, address indexed broker);
     event ChangeCampaign(uint256 fundingStartBlock, uint256 fundingEndBlock);
     event AddBounty(address indexed bountyHunter, uint256 amount);
-    event ReferralBonus(address indexed backer, address indexed broker, uint256 amount);
+    event ReferralBonus(address indexed Investor, address indexed broker, uint256 amount);
 
      // Crowdsale information
     bool public finalizedCrowdfunding = false;
 
     uint256 public fundingStartBlock = 0; // crowdsale start block
-    uint256 public fundingEndBlock = 0; // crowdsale end block
+    uint256 public fundingEndBlock = 0;   // crowdsale end block
     uint256 public constant lockedTokens =     250000000000000000000000000; //25% tokens to Vault and locked for 6 months - 250 millions
     uint256 public bonusAndBountyTokens =       50000000000000000000000000; //5% tokens for referral bonus and bounty - 50 millions
     uint256 public constant devsTokens =       100000000000000000000000000; //10% tokens for team - 100 millions
@@ -256,13 +256,13 @@ contract GameRewardToken is owned, TokenERC20 {
 
     uint256 public constant tokenPrivateMax =  200000000000000000000000000; //Private-sale must stop when 100 millions tokens sold
 
-    uint256 public constant minContributionAmount =     250000000000000000; //Backer must buy atleast 0.25ETH in open-sale
+    uint256 public constant minContributionAmount =     250000000000000000; //Investor must buy atleast 0.25ETH in open-sale
     uint256 public constant maxContributionAmount =  100000000000000000000; //Max 100 ETH in open-sale and pre-sale
 
-    uint256 public constant minPrivateContribution =  50000000000000000000; //Backer must buy atleast 50ETH in private-sale
-    uint256 public constant minPreContribution =       1000000000000000000; //Backer must buy atleast 1ETH in pre-sale
+    uint256 public constant minPrivateContribution =  50000000000000000000; //Investor must buy atleast 50ETH in private-sale
+    uint256 public constant minPreContribution =       1000000000000000000; //Investor must buy atleast 1ETH in pre-sale
 
-    uint256 public constant minAmountToGetBonus =      5000000000000000000; //Backer must buy atleast 5ETH to receive referral bonus
+    uint256 public constant minAmountToGetBonus =      5000000000000000000; //Investor must buy atleast 5ETH to receive referral bonus
     uint256 public constant referralBonus =                              5; //5% for referral bonus
     uint256 public constant privateBonus =                              40; //40% bonus in private-sale
     uint256 public constant preBonus =                                  20; //20% bonus in pre-sale;
@@ -277,10 +277,9 @@ contract GameRewardToken is owned, TokenERC20 {
     address public releaseTokenHolder;
     address public devsHolder;
 
-    function GameRewardToken(
-                        address _lockedTokenHolder,
-                        address _releaseTokenHolder,
-                        address _devsAddress
+    constructor(address _lockedTokenHolder,
+                address _releaseTokenHolder,
+                address _devsAddress
     ) TokenERC20("GameReward", // Name
                  "GRD",        // Symbol 
                   18,          // Decimals
@@ -367,7 +366,7 @@ contract GameRewardToken is owned, TokenERC20 {
 
     //Crowdsale Functions
 
-    /// @notice get early bonus for backer
+    /// @notice get early bonus for Investor
     function _getEarlyBonus() internal view returns(uint){
         if(getState()==State.PrivateFunding) return privateBonus;  
         else if(getState()==State.PreFunding) return preBonus; 
@@ -527,7 +526,7 @@ contract GameRewardToken is owned, TokenERC20 {
         devsHolder.transfer(address(this).balance);
     }
 
-    /// @notice send @param _unSoldTokens to all backer base on their share
+    /// @notice send @param _unSoldTokens to all Investor base on their share
     function requestFreeDistribution() external{
       require(getState()==State.Success);
       assert(investors[msg.sender]>0);
