@@ -57,6 +57,11 @@ contract SafeMath {
   function min256(uint256 a, uint256 b) internal pure returns (uint256) {
     return a < b ? a : b;
   }
+
+  function toWei(uint256 a) internal pure returns (uint256){
+    assert(a>0);
+    return a * 10 ** 18;
+  }
 }
 
 interface tokenRecipient { 
@@ -143,7 +148,7 @@ contract TokenERC20 is SafeMath{
         _transfer(_from, _to, _value);
         return true;
     }
-
+      
     /**
      * Set allowance for other address
      *
@@ -231,15 +236,17 @@ contract GameRewardToken is owned, TokenERC20 {
 
     /* This generates a public event on the blockchain that will notify clients */
     event FrozenFunds(address indexed target, bool frozen);
-    event FundTransfer(address indexed to, uint256 value);
+    event FundTransfer(address indexed to, uint256 eth , uint256 value, uint block);
     event SetApplication(address indexed target, address indexed parent);
     event Fee(address indexed from, address indexed collector, uint256 fee);
-    event FreeDistribution(uint256 number);
-    event Refund(address indexed to, uint256 value);
+    event FreeDistribution(address indexed to, uint256 value, uint block);
+    event Refund(address indexed to, uint256 value, uint block);
+    event BonusTransfer(address indexed to, uint256 value, uint block);
+    event BountyTransfer(address indexed to, uint256 value, uint block);
     event SetReferral(address indexed target, address indexed broker);
     event ChangeCampaign(uint256 fundingStartBlock, uint256 fundingEndBlock);
-    event AddBounty(address indexed bountyHunter, uint256 amount);
-    event ReferralBonus(address indexed Investor, address indexed broker, uint256 amount);
+    event AddBounty(address indexed bountyHunter, uint256 value);
+    event ReferralBonus(address indexed investor, address indexed broker, uint256 value);
 
      // Crowdsale information
     bool public finalizedCrowdfunding = false;
@@ -269,7 +276,7 @@ contract GameRewardToken is owned, TokenERC20 {
 
     uint256 public tokensSold;
 
-    uint256 public constant numBlocksLocked = 1110857;  //180 days locked tokens
+    uint256 public constant numBlocksLocked = 1110857;  //180 days locked vault tokens
     uint256 public constant numBlocksBountyLocked = 40000; //7 days locked bounty tokens
     uint256 unlockedAtBlockNumber;
 
@@ -396,7 +403,7 @@ contract GameRewardToken is owned, TokenERC20 {
         referrals[_target] = _broker;
         emit SetReferral(_target, _broker);
         if(_amount>0x0){
-            uint256 brokerBonus = safeDiv(safeMul(_amount,referralBonus),hundredPercent);
+            uint256 brokerBonus = safeDiv(safeMul(toWei(_amount),referralBonus),hundredPercent);
             bonus[_broker] = safeAdd(bonus[_broker],brokerBonus);
             emit ReferralBonus(_target,_broker,brokerBonus);
         }
@@ -405,9 +412,9 @@ contract GameRewardToken is owned, TokenERC20 {
     /// @notice set token for bounty hunter to release when ICO success
     function addBounty(address _hunter, uint256 _amount) onlyOwner public{
         require(_hunter!=0x0);
-        require(_amount<bonusAndBountyTokens);
-        bounties[_hunter] = safeAdd(bounties[_hunter],_amount);
-        bonusAndBountyTokens = safeSub(bonusAndBountyTokens,_amount);
+        require(_amount<=safeSub(bonusAndBountyTokens,toWei(_amount)));
+        bounties[_hunter] = safeAdd(bounties[_hunter],toWei(_amount));
+        bonusAndBountyTokens = safeSub(bonusAndBountyTokens,toWei(_amount));
         emit AddBounty(_hunter, _amount);
     }
 
@@ -461,7 +468,7 @@ contract GameRewardToken is owned, TokenERC20 {
         // Assign new tokens to the sender
         balanceOf[msg.sender] = safeAdd(balanceOf[msg.sender], createdTokens);
         // Log token creation event
-        emit FundTransfer(msg.sender, createdTokens);
+        emit FundTransfer(msg.sender,msg.value, createdTokens, block.number);
         emit Transfer(0, msg.sender, createdTokens);
     }
 
@@ -470,10 +477,11 @@ contract GameRewardToken is owned, TokenERC20 {
       require(getState()==State.Success);
       uint256 bonusAmount = bonus[msg.sender];
       assert(bonusAmount>0);
-      require(bonusAmount<bonusAndBountyTokens);
+      require(bonusAmount<=safeSub(bonusAndBountyTokens,bonusAmount));
       balanceOf[msg.sender] = safeAdd(balanceOf[msg.sender],bonusAmount);
       bonus[msg.sender] = 0;
       bonusAndBountyTokens = safeSub(bonusAndBountyTokens,bonusAmount);
+      emit BonusTransfer(msg.sender,bonusAmount,block.number);
       emit Transfer(0,msg.sender,bonusAmount);
     }
 
@@ -485,8 +493,8 @@ contract GameRewardToken is owned, TokenERC20 {
         require (balanceOf[lockedTokenHolder] > 0x0);
         require (block.number >= unlockedAtBlockNumber);
         balanceOf[devsHolder] = safeAdd(balanceOf[devsHolder],balanceOf[lockedTokenHolder]);
-        balanceOf[lockedTokenHolder] = 0;
         emit Transfer(lockedTokenHolder,devsHolder,balanceOf[lockedTokenHolder]);
+        balanceOf[lockedTokenHolder] = 0;
     }
     
     /// @notice request to receive bounty tokens
@@ -496,7 +504,9 @@ contract GameRewardToken is owned, TokenERC20 {
         require(getState()==State.Success);
         assert (bounties[msg.sender]>0);
         balanceOf[msg.sender] = safeAdd(balanceOf[msg.sender],bounties[msg.sender]);
+        emit BountyTransfer(msg.sender,bounties[msg.sender],block.number);
         emit Transfer(0,msg.sender,bounties[msg.sender]);
+        bounties[msg.sender] = 0;
     }
 
     /// @notice Finalize crowdfunding
@@ -535,7 +545,7 @@ contract GameRewardToken is owned, TokenERC20 {
       uint256 freeTokens = safeDiv(safeMul(unSoldTokens,investors[msg.sender]),tokensSold);
       balanceOf[msg.sender] = safeAdd(balanceOf[msg.sender],freeTokens);
       investors[msg.sender] = 0;
-      emit FreeDistribution(freeTokens);
+      emit FreeDistribution(msg.sender,freeTokens,block.number);
       emit Transfer(0,msg.sender, freeTokens);
 
     }
@@ -548,8 +558,8 @@ contract GameRewardToken is owned, TokenERC20 {
         assert (getState() == State.Failure);
         assert (funders[msg.sender]>0);
         msg.sender.transfer(funders[msg.sender]);  
+        emit Refund( msg.sender, funders[msg.sender],block.number);
         funders[msg.sender]=0;
-        emit Refund( msg.sender, funders[msg.sender]);
     }
 
     /// @notice This manages the crowdfunding state machine
