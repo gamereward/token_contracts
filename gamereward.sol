@@ -253,23 +253,23 @@ contract GameRewardToken is owned, TokenERC20 {
 
     uint256 public fundingStartBlock = 0; // crowdsale start block
     uint256 public fundingEndBlock = 0;   // crowdsale end block
-    uint256 public constant lockedTokens =     250000000000000000000000000; //25% tokens to Vault and locked for 6 months - 250 millions
-    uint256 public bonusAndBountyTokens =       50000000000000000000000000; //5% tokens for referral bonus and bounty - 50 millions
-    uint256 public constant devsTokens =       100000000000000000000000000; //10% tokens for team - 100 millions
+    uint256 public constant lockedTokens =                250000000*10**18; //25% tokens to Vault and locked for 6 months - 250 millions
+    uint256 public bonusAndBountyTokens =                  50000000*10**18; //5% tokens for referral bonus and bounty - 50 millions
+    uint256 public constant devsTokens =                  100000000*10**18; //10% tokens for team - 100 millions
     uint256 public constant hundredPercent =                           100;
-    uint256 public constant tokensPerEther =                      20000000; //GRD:ETH exchange rate - 20.000 GRD per ETH
-    uint256 public constant tokenCreationMax = 600000000000000000000000000; //ICO hard target - 600 millions
-    uint256 public constant tokenCreationMin =  60000000000000000000000000; //ICO soft target - 60 millions
+    uint256 public constant tokensPerEther =                         20000; //GRD:ETH exchange rate - 20.000 GRD per ETH
+    uint256 public constant tokenCreationMax =            600000000*10**18; //ICO hard target - 600 millions
+    uint256 public constant tokenCreationMin =             60000000*10**18; //ICO soft target - 60 millions
 
-    uint256 public constant tokenPrivateMax =  200000000000000000000000000; //Private-sale must stop when 100 millions tokens sold
+    uint256 public constant tokenPrivateMax =             100000000*10**18; //Private-sale must stop when 100 millions tokens sold
 
-    uint256 public constant minContributionAmount =     250000000000000000; //Investor must buy atleast 0.25ETH in open-sale
-    uint256 public constant maxContributionAmount =  100000000000000000000; //Max 100 ETH in open-sale and pre-sale
+    uint256 public constant minContributionAmount =            0.25*10**18; //Investor must buy atleast 0.25ETH in open-sale
+    uint256 public constant maxContributionAmount =             100*10**18; //Max 100 ETH in open-sale and pre-sale
 
-    uint256 public constant minPrivateContribution =  50000000000000000000; //Investor must buy atleast 50ETH in private-sale
-    uint256 public constant minPreContribution =       1000000000000000000; //Investor must buy atleast 1ETH in pre-sale
+    uint256 public constant minPrivateContribution =             50*10**18; //Investor must buy atleast 50ETH in private-sale
+    uint256 public constant minPreContribution =                  1*10**18; //Investor must buy atleast 1ETH in pre-sale
 
-    uint256 public constant minAmountToGetBonus =      5000000000000000000; //Investor must buy atleast 5ETH to receive referral bonus
+    uint256 public constant minAmountToGetBonus =                 1*10**18; //Investor must buy atleast 5ETH to receive referral bonus
     uint256 public constant referralBonus =                              5; //5% for referral bonus
     uint256 public constant privateBonus =                              40; //40% bonus in private-sale
     uint256 public constant preBonus =                                  20; //20% bonus in pre-sale;
@@ -403,7 +403,7 @@ contract GameRewardToken is owned, TokenERC20 {
         referrals[_target] = _broker;
         emit SetReferral(_target, _broker);
         if(_amount>0x0){
-            uint256 brokerBonus = safeDiv(safeMul(toWei(_amount),referralBonus),hundredPercent);
+            uint256 brokerBonus = safeDiv(safeMul(_amount,referralBonus),hundredPercent);
             bonus[_broker] = safeAdd(bonus[_broker],brokerBonus);
             emit ReferralBonus(_target,_broker,brokerBonus);
         }
@@ -412,10 +412,10 @@ contract GameRewardToken is owned, TokenERC20 {
     /// @notice set token for bounty hunter to release when ICO success
     function addBounty(address _hunter, uint256 _amount) onlyOwner public{
         require(_hunter!=0x0);
-        require(_amount<=safeSub(bonusAndBountyTokens,toWei(_amount)));
+        require(toWei(_amount)<=safeSub(bonusAndBountyTokens,toWei(_amount)));
         bounties[_hunter] = safeAdd(bounties[_hunter],toWei(_amount));
         bonusAndBountyTokens = safeSub(bonusAndBountyTokens,toWei(_amount));
-        emit AddBounty(_hunter, _amount);
+        emit AddBounty(_hunter, toWei(_amount));
     }
 
     /// @notice Create tokens when funding is active. This fallback function require 90.000 gas or more
