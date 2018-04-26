@@ -266,23 +266,25 @@ contract GameRewardToken is owned, TokenERC20 {
     uint256 public constant minContributionAmount =            0.25*10**18; //Investor must buy atleast 0.25ETH in open-sale
     uint256 public constant maxContributionAmount =             100*10**18; //Max 100 ETH in open-sale and pre-sale
 
-    uint256 public constant minPrivateContribution =             50*10**18; //Investor must buy atleast 50ETH in private-sale
+    uint256 public constant minPrivateContribution =             10*10**18; //Investor must buy atleast 10ETH in private-sale
     uint256 public constant minPreContribution =                  1*10**18; //Investor must buy atleast 1ETH in pre-sale
 
-    uint256 public constant minAmountToGetBonus =                 1*10**18; //Investor must buy atleast 5ETH to receive referral bonus
+    uint256 public constant minAmountToGetBonus =                 1*10**18; //Investor must buy atleast 1ETH to receive referral bonus
     uint256 public constant referralBonus =                              5; //5% for referral bonus
     uint256 public constant privateBonus =                              40; //40% bonus in private-sale
     uint256 public constant preBonus =                                  20; //20% bonus in pre-sale;
 
     uint256 public tokensSold;
+    uint256 public collectedETH;
 
     uint256 public constant numBlocksLocked = 1110857;  //180 days locked vault tokens
-    uint256 public constant numBlocksBountyLocked = 40000; //7 days locked bounty tokens
+    bool public releasedBountyTokens = false; //number of blocks locked bounty tokens
     uint256 unlockedAtBlockNumber;
 
     address public lockedTokenHolder;
     address public releaseTokenHolder;
     address public devsHolder;
+
 
     constructor(address _lockedTokenHolder,
                 address _releaseTokenHolder,
@@ -393,6 +395,12 @@ contract GameRewardToken is owned, TokenERC20 {
         emit ChangeCampaign(_fundingStartBlock,_fundingEndBlock);
     }
 
+    function releaseBountyTokens() onlyOwner public{
+      require(!releasedBountyTokens);
+      require(getState()==State.Success);
+      releasedBountyTokens = true;
+    }
+
 
     /// @notice set Broker for Investor
     /// @param _target address of Investor
@@ -452,7 +460,7 @@ contract GameRewardToken is owned, TokenERC20 {
 
         // we are creating tokens, so increase the tokenSold
         tokensSold = safeAdd(tokensSold, createdTokens);
-        
+        collectedETH = safeAdd(collectedETH,msg.value);
         
         // add bonus if has referral
         if(referrals[msg.sender]!= 0x0){
@@ -500,7 +508,7 @@ contract GameRewardToken is owned, TokenERC20 {
     /// @notice request to receive bounty tokens
     /// @dev require State == Succes
     function requestBounty() external{
-        require(block.number > safeAdd(fundingEndBlock ,numBlocksBountyLocked)); //locked bounty hunter's token for 7 days after end of campaign
+        require(releasedBountyTokens); //locked bounty hunter's token for 7 days after end of campaign
         require(getState()==State.Success);
         assert (bounties[msg.sender]>0);
         balanceOf[msg.sender] = safeAdd(balanceOf[msg.sender],bounties[msg.sender]);
