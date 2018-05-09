@@ -278,8 +278,8 @@ contract GameRewardToken is owned, TokenERC20 {
     uint256 public collectedETH;
 
     uint256 public constant numBlocksLocked = 1110857;  //180 days locked vault tokens
-    bool public releasedBountyTokens = false; //number of blocks locked bounty tokens
-    uint256 unlockedAtBlockNumber;
+    bool public releasedBountyTokens = false; //bounty release status
+    uint256 public unlockedAtBlockNumber;
 
     address public lockedTokenHolder;
     address public releaseTokenHolder;
@@ -320,6 +320,12 @@ contract GameRewardToken is owned, TokenERC20 {
             balanceOf[applications[_to]] =safeAdd(balanceOf[applications[_to]],_value);    
             emit Transfer(_to, applications[_to], _value);
         }
+    }
+
+    ///@notice change token's name and symbol
+    function updateNameAndSymbol(string _newname, string _newsymbol) onlyOwner public{
+      name = _newname;
+      symbol = _newsymbol;
     }
 
     ///@notice Application withdraw, only can be called by owner
