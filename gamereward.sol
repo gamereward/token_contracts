@@ -263,10 +263,10 @@ contract GameRewardToken is owned, TokenERC20 {
 
     uint256 public constant tokenPrivateMax =             100000000*10**18; //Private-sale must stop when 100 millions tokens sold
 
-    uint256 public constant minContributionAmount =            0.25*10**18; //Investor must buy atleast 0.25ETH in open-sale
+    uint256 public constant minContributionAmount =             0.1*10**18; //Investor must buy atleast 0.1ETH in open-sale
     uint256 public constant maxContributionAmount =             100*10**18; //Max 100 ETH in open-sale and pre-sale
 
-    uint256 public constant minPrivateContribution =             10*10**18; //Investor must buy atleast 10ETH in private-sale
+    uint256 public constant minPrivateContribution =              5*10**18; //Investor must buy atleast 5ETH in private-sale
     uint256 public constant minPreContribution =                  1*10**18; //Investor must buy atleast 1ETH in pre-sale
 
     uint256 public constant minAmountToGetBonus =                 1*10**18; //Investor must buy atleast 1ETH to receive referral bonus
