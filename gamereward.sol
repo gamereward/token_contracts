@@ -227,7 +227,6 @@ contract GameRewardToken is owned, TokenERC20 {
 
 
     mapping (address => bool) public frozenAccount;
-    mapping (address => address) public applications;
     mapping (address => uint256) public bounties;
     mapping (address => uint256) public bonus;
     mapping (address => address) public referrals;
@@ -237,7 +236,6 @@ contract GameRewardToken is owned, TokenERC20 {
     /* This generates a public event on the blockchain that will notify clients */
     event FrozenFunds(address indexed target, bool frozen);
     event FundTransfer(address indexed to, uint256 eth , uint256 value, uint block);
-    event SetApplication(address indexed target, address indexed parent);
     event Fee(address indexed from, address indexed collector, uint256 fee);
     event FreeDistribution(address indexed to, uint256 value, uint block);
     event Refund(address indexed to, uint256 value, uint block);
@@ -284,11 +282,13 @@ contract GameRewardToken is owned, TokenERC20 {
     address public lockedTokenHolder;
     address public releaseTokenHolder;
     address public devsHolder;
+    address public multiSigWalletAddress;
 
 
     constructor(address _lockedTokenHolder,
                 address _releaseTokenHolder,
-                address _devsAddress
+                address _devsAddress,
+                address _multiSigWalletAddress
     ) TokenERC20("GameReward", // Name
                  "GRD",        // Symbol 
                   18,          // Decimals
@@ -298,9 +298,11 @@ contract GameRewardToken is owned, TokenERC20 {
         require (_lockedTokenHolder != 0x0);
         require (_releaseTokenHolder != 0x0);
         require (_devsAddress != 0x0);
+        require (_multiSigWalletAddress != 0x0);
         lockedTokenHolder = _lockedTokenHolder;
         releaseTokenHolder = _releaseTokenHolder;
         devsHolder = _devsAddress;
+        multiSigWalletAddress = _multiSigWalletAddress;
     }
 
     /* Internal transfer, only can be called by this contract */
@@ -315,58 +317,12 @@ contract GameRewardToken is owned, TokenERC20 {
         balanceOf[_from] = safeSub(balanceOf[_from],_value);       // Subtract from the sender
         balanceOf[_to] = safeAdd(balanceOf[_to],_value);           // Add the same to the recipient
         emit Transfer(_from, _to, _value);
-        if(applications[_to] != 0x0){                              // If this address from an application
-            balanceOf[_to] = safeSub(balanceOf[_to],_value);       // Forward tokens to application address 
-            balanceOf[applications[_to]] =safeAdd(balanceOf[applications[_to]],_value);    
-            emit Transfer(_to, applications[_to], _value);
-        }
     }
 
     ///@notice change token's name and symbol
     function updateNameAndSymbol(string _newname, string _newsymbol) onlyOwner public{
       name = _newname;
       symbol = _newsymbol;
-    }
-
-    ///@notice Application withdraw, only can be called by owner
-    ///@param _from address of the sender
-    ///@param _to address of the receiver
-    ///@param _value the amount to send
-    ///@param _fee the amount of transaction fee
-    ///@param _collector address of collector to receive fee
-    function withdraw(address _from, address _to, uint _value, uint _fee, address _collector) onlyOwner public {
-        require (getState() == State.Success);
-        require (applications[_from]!=0x0);                             // Check if sender from an application
-        address app = applications[_from];
-        require (_collector != 0x0);
-        require (_to != 0x0);                                           // Prevent transfer to 0x0 address. Use burn() instead
-        require (balanceOf[app] >= safeAdd(_value, _fee));              // Prevent transfer to 0x0 address. Use burn() instead
-        require (safeAdd(balanceOf[_to], _value)> balanceOf[_to]);      // Check for overflows
-        require (!frozenAccount[app]);                                  // Check if sender is frozen
-        require (!frozenAccount[_to]);                                  // Check if recipient is frozen
-        require (_from != lockedTokenHolder);
-        balanceOf[app] = safeSub(balanceOf[app],safeAdd(_value, _fee)); // Subtract from the Application
-        balanceOf[_to] = safeAdd(balanceOf[_to],_value);                // Add value to the target
-        balanceOf[_collector] = safeAdd(balanceOf[_collector], _fee);   // Add fee to fee collector
-        emit Fee(app,_collector,_fee);
-        emit Transfer(app, _collector, _fee);
-        emit Transfer(app, _to, _value);
-    }
-    
-    ///@notice map an address to its application address
-    ///@param _target Address to set parent
-    ///@param _parent Address of parent
-    function setApplication(address _target, address _parent) onlyOwner public {
-        require (getState() == State.Success);
-        require(_parent!=0x0);
-        applications[_target]=_parent;
-        uint256 currentBalance=balanceOf[_target];
-        emit SetApplication(_target,_parent);
-        if(currentBalance>0x0){
-            balanceOf[_target] = safeDiv(balanceOf[_target],currentBalance);
-            balanceOf[_parent] = safeAdd(balanceOf[_parent],currentBalance);
-            emit Transfer(_target,_parent,currentBalance);
-        }
     }
 
     /// @notice `freeze? Prevent | Allow` `target` from sending & receiving tokens
@@ -377,7 +333,10 @@ contract GameRewardToken is owned, TokenERC20 {
         emit FrozenFunds(_target, _freeze);
     }
 
-
+    function setMultiSigWallet(address newWallet) external {
+        require (msg.sender == multiSigWalletAddress);
+        multiSigWalletAddress = newWallet;
+    }
 
     //Crowdsale Functions
 
@@ -446,7 +405,7 @@ contract GameRewardToken is owned, TokenERC20 {
             require(msg.value>=minPrivateContribution);
         }else if(getState()==State.PreFunding){
             require(msg.value>=minPreContribution && msg.value < maxContributionAmount);
-        }else if(getState()==State.Funding){
+        }else{
             require(msg.value>=minContributionAmount && msg.value < maxContributionAmount);
         }
 
@@ -546,8 +505,8 @@ contract GameRewardToken is owned, TokenERC20 {
         balanceOf[devsHolder] = safeAdd(balanceOf[devsHolder], devsTokens);
         emit Transfer(0, devsHolder, devsTokens);
 
-        // Transfer ETH to the devs address.
-        devsHolder.transfer(address(this).balance);
+        // Transfer ETH to the multiSigWalletAddress address.
+        multiSigWalletAddress.transfer(address(this).balance);
     }
 
     /// @notice send @param _unSoldTokens to all Investor base on their share
@@ -588,5 +547,4 @@ contract GameRewardToken is owned, TokenERC20 {
       else if (tokensSold >= tokenCreationMin) return State.Success;
       else return State.Failure;
     }
-
 }
